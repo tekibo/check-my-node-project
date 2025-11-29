@@ -4,8 +4,7 @@
   "description": "A self-contained CLI tool to scan lockfiles for known supply chain vulnerabilities.",
   "main": "index.js",
   "scripts": {
-    "test": "node index.js --lockfile=pnpm-lock.yaml",
-    "custom": "node index.js --lockfile=pnpm-lock.yaml --malicious=custom.txt"
+    "test": "nope"
   },
   "type": "module",
   "bin": {

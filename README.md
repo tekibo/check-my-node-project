@@ -1,126 +1,147 @@
-```md
 # check-my-node-project
 
-A powerful security scanner for `pnpm-lock.yaml`.  
-It detects malicious packages **anywhere** in the lockfile — including deeply nested PNPM inline deps such as:
+A powerful security scanner for PNPM lockfiles.  
+It detects malicious packages **anywhere** in a `pnpm-lock.yaml`, including deeply nested PNPM inline dependencies such as:
 
 ```
-
-(pkg@1.2.3)
+(pkgA@1.2.3)
 (parent(dep@4.5.6)(other@7.8.9))
-
 ```
 
-It also supports a **custom malicious list file** passed by users.
+It now supports **positional lockfile paths** and **custom malicious list files**.
 
 ---
 
-# ✨ Features
+# ✨ Key Features
 
-- Detects malicious packages:
-  - Top-level `packages:` section
-  - Nested inline PNPM deps inside parentheses
-  - Dev/prod environments
-  - Scoped or unscoped names (`@scope/name` ↔ `scope/name`)
-- Custom malicious list supported (user-provided `.txt` file)
-- Advanced flags:
-  - `--json`
-  - `--silent`
-  - `--fail-on-safe`
-  - `--include-dev`
-  - `--strict`
-  - `--malicious=<file.txt>` ← **NEW**
-- Severity scoring + clean terminal output
+- Scans:
+  - Standard top-level `packages:` entries
+  - Inline PNPM nested deps like `(better-sqlite3@12.4.1)`
+- Matches scoped & unscoped names:
+  - `@scope/name` ⇔ `scope/name`
+- Supports:
+  - Passing a custom malicious list via `--malicious=file.txt`
+  - Passing lockfile path as a **positional argument**
+  - Dev/Prod separation
+- Strict security modes (`--strict`, `--fail-on-safe`)
+- JSON mode (`--json`)
+- Clean terminal output
 
 ---
 
 # 📦 Installation
 
-```
-
+```bash
 npm install -g check-my-node-project
-
 ```
 
-or run directly:
+or use via `npx`:
 
-```
-
-npx check-my-node-project --lockfile=pnpm-lock.yaml
-
+```bash
+npx check-my-node-project
 ```
 
 ---
 
-# 📁 Required Files
+# 📁 How the Tool Finds the Lockfile
 
-### 1. Lockfile  
-`pnpm-lock.yaml` must exist, or you must point to it:
+### ✔ Default behavior
+If you run:
 
+```bash
+npx check-my-node-project
 ```
 
---lockfile=path/to/pnpm-lock.yaml
+It automatically looks for:
 
 ```
-
-### 2. Malicious list  
-By default the tool uses the built-in `malicious_list.txt`, but you can override it:
-
+./pnpm-lock.yaml
 ```
 
---malicious=my-list.txt
+in the current directory.
 
+---
+
+### ✔ Provide a custom lockfile path
+You can provide a lockfile path as a **positional argument**:
+
+```bash
+npx check-my-node-project ./frontend/pnpm-lock.yaml
+npx check-my-node-project ../project/pnpm-lock.yaml
+```
+
+### ✔ Provide a directory
+If you pass a directory, it will automatically look for:
+
+```
+<that-directory>/pnpm-lock.yaml
+```
+
+Example:
+
+```bash
+npx check-my-node-project ./frontend
 ```
 
 ---
 
-# 🔥 Custom Malicious List Support
+# 🔥 Malicious List File Support
 
-### Pass a custom `.txt` file:
-
-```
-
-npx check-my-node-project --lockfile=pnpm-lock.yaml --malicious=my-custom-threats.txt
+### Default list  
+If you do nothing, the tool uses its internal built-in file:
 
 ```
-
-### Format of the file:
-
+malicious_list.txt
 ```
 
-@scope/package (v1.2.3)
-package-name (v4.5.6)
-somepkg (3.2.1)
-
-```
-
-Both `v1.2.3` and `1.2.3` are accepted.
-
-### Notes:
-- The tool normalizes names:
-  - `@scope/pkg` matches nested `(scope/pkg@1.2.3)`
-- Multiple entries allowed
-- Blank lines ignored
-- Duplicates removed automatically
+(This is bundled inside the package.)
 
 ---
 
-# 🚀 Usage
+### Provide your own list  
+Users can supply their own `.txt` file:
 
-### Basic scan
-
+```bash
+npx check-my-node-project ./pnpm-lock.yaml --malicious=my-bad-packages.txt
 ```
 
-npx check-my-node-project --lockfile=pnpm-lock.yaml
+### File format
 
 ```
-
-### Scan with external malicious list
-
+package-name (v1.2.3)
+@scope/name (v4.5.6)
+anotherpkg (3.2.1)
 ```
 
-npx check-my-node-project --lockfile=pnpm-lock.yaml --malicious=bad-packages.txt
+Accepts both:
 
+- `v1.2.3`
+- `1.2.3`
+
+Blank lines are ignored.
+
+---
+
+# 🚀 Usage Examples
+
+### Basic scan (default lockfile)
+```bash
+npx check-my-node-project
+```
+
+### Scan a specific lockfile
+```bash
+npx check-my-node-project ./path/to/pnpm-lock.yaml
+```
+
+### Scan a folder containing a lockfile
+```bash
+npx check-my-node-project ./frontend
+```
+
+### Use a custom malicious list
+```bash
+npx check-my-node-project ./pnpm-lock.yaml --malicious=custom-list.txt
 ```
 
 ---
@@ -128,21 +149,19 @@ npx check-my-node-project --lockfile=pnpm-lock.yaml --malicious=bad-packages.txt
 # 🏷 CLI Flags
 
 ### `--malicious=<file.txt>`
-Use a custom threats list instead of the bundled one.
+Use a user-provided malicious list.
 
 ```
-
---malicious=my-threats.txt
-
+--malicious=my-bad.txt
 ```
 
 ---
 
 ### `--json`
-Output machine-readable JSON.
+Output machine-readable JSON only.
 
 ### `--silent`
-Suppress human logs (JSON still prints if `--json` is active).
+Suppress all human logs (JSON still prints if `--json` is used).
 
 ### `--fail-on-safe`
 Even safe versions of malicious packages cause exit code `1`.
@@ -151,116 +170,100 @@ Even safe versions of malicious packages cause exit code `1`.
 Dev-only malicious packages do **not** cause failure.
 
 ### `--strict`
-Any dangerous package (dev or prod) causes failure.
+Any dangerous package (prod or dev) will cause failure.
 
 ---
 
-# 🔍 Detection Rules
+# 🔍 Detection Logic
 
-### ✔ Safe match  
-Package exists, but version is *not* the malicious one:
+### ✔ Safe version
+Package exists, but version does NOT match the malicious version:
 
 ```
-
 ✔ lodash@4.17.21 — Safe (malicious version is 4.17.20)
-
 ```
 
-### ❌ Dangerous match  
-Exact malicious version installed:
+### ❌ Dangerous version
+Exact malicious version discovered:
 
 ```
-
 ❌ better-sqlite3@12.4.1 — Malicious version INSTALLED!
-
 ```
 
-### 🌀 Nested match  
-Detected inside PNPM's nested dependency graph:
+### 🌀 Nested inline deps
+Anything like this gets scanned too:
 
 ```
-
-❌ accordproject/concerto-types@3.24.1 (nested)
-
+(accprdproject/concerto-types@3.24.1)
+(parent(depth@1.0.0)(better-sqlite3@12.4.1))
 ```
 
 ---
 
 # 📊 Exit Codes
 
-| Flag mode | What causes failure |
-|----------|----------------------|
-| **Default** | Any dangerous pkg |
-| **--include-dev** | Only prod-dangerous pkgs |
-| **--strict** | Any dangerous pkg (prod or dev) |
-| **--fail-on-safe** | ANY appearance of a malicious package |
-| **--json** | Output only, exit code follows the above rules |
+The exit code depends on flags:
+
+| Flag mode | Fails when… |
+|----------|--------------|
+| **Default** | Any *dangerous* package |
+| **--include-dev** | Only *prod/unknown* dangerous packages |
+| **--strict** | Any dangerous package (prod or dev) |
+| **--fail-on-safe** | ANY match at all (safe or dangerous) |
+| **--json** | Follows above rules, prints JSON |
 
 ---
 
-# 🔧 Examples
+# 🔧 JSON Example
 
-### Normal scan
-
+```bash
+npx check-my-node-project --json
 ```
 
-npx check-my-node-project --lockfile=pnpm-lock.yaml
+Example output:
 
-```
-
-### Strict scan for CI
-
-```
-
-npx check-my-node-project --lockfile=pnpm-lock.yaml --strict
-
-```
-
-### Treat dev deps as harmless
-
-```
-
-npx check-my-node-project --lockfile=pnpm-lock.yaml --include-dev
-
-```
-
-### Fail even on safe versions
-
-```
-
-npx check-my-node-project --lockfile=pnpm-lock.yaml --fail-on-safe
-
-```
-
-### Use a custom malicious list
-
-```
-
-npx check-my-node-project --lockfile=pnpm-lock.yaml --malicious=custom.txt
-
-```
-
-### JSON + silent (script-friendly)
-
-```
-
-npx check-my-node-project --lockfile=pnpm-lock.yaml --json --silent
-
+```json
+{
+  "lockfile": "./pnpm-lock.yaml",
+  "maliciousList": "./malicious_list.txt",
+  "matches": [
+    {
+      "name": "better-sqlite3",
+      "version": "12.4.1",
+      "status": "danger",
+      "nested": true,
+      "env": "unknown"
+    }
+  ],
+  "summary": {
+    "dangerProd": 1,
+    "dangerDev": 0
+  },
+  "flags": {
+    "json": true,
+    "silent": false,
+    "failOnSafe": false,
+    "includeDev": false,
+    "strict": false
+  },
+  "exitCode": 1
+}
 ```
 
 ---
 
 # 🙌 Summary
 
-This tool is designed to thoroughly scan PNPM projects for **known malicious packages**, even if they appear in obscure or deeply nested dependency structures.
+`check-my-node-project` is a hardened PNPM lockfile scanner with:
 
-You can now:
+* Full nested dependency analysis
+* Custom malicious list support
+* Automatic lockfile discovery
+* Strict + flexible validation modes
+* JSON output for tooling
+* Scoped name normalization
+* Simple, intuitive UX
 
-- Provide your own `.txt` list  
-- Control strictness levels  
-- Differentiate dev/prod  
-- Use JSON or silent mode  
-- Fail builds the exact way you want  
+It’s built to ensure **no malicious package — anywhere in your graph — escapes detection**.
 
-Ready to plug into any workflow or local audit.
-```
+Enjoy a cleaner, safer supply chain.
