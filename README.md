@@ -1,85 +1,266 @@
+```md
 # check-my-node-project
 
-A self-contained command-line interface (CLI) tool designed to scan Node.js lockfiles for known supply chain vulnerabilities by checking against an internally maintained list of malicious packages and versions.
+A powerful security scanner for `pnpm-lock.yaml`.  
+It detects malicious packages **anywhere** in the lockfile — including deeply nested PNPM inline deps such as:
 
-> **Note:** Currently supports only **PNPM lockfiles (`pnpm-lock.yaml`)**.  
-> Future updates will add support for `package-lock.json` (npm) and `yarn.lock`.
+```
+
+(pkg@1.2.3)
+(parent(dep@4.5.6)(other@7.8.9))
+
+```
+
+It also supports a **custom malicious list file** passed by users.
 
 ---
 
-## 📦 Installation
+# ✨ Features
 
-Install globally:
+- Detects malicious packages:
+  - Top-level `packages:` section
+  - Nested inline PNPM deps inside parentheses
+  - Dev/prod environments
+  - Scoped or unscoped names (`@scope/name` ↔ `scope/name`)
+- Custom malicious list supported (user-provided `.txt` file)
+- Advanced flags:
+  - `--json`
+  - `--silent`
+  - `--fail-on-safe`
+  - `--include-dev`
+  - `--strict`
+  - `--malicious=<file.txt>` ← **NEW**
+- Severity scoring + clean terminal output
 
-```sh
+---
+
+# 📦 Installation
+
+```
+
 npm install -g check-my-node-project
+
 ```
 
-Or run without installing (recommended):
+or run directly:
 
-```sh
+```
+
 npx check-my-node-project --lockfile=pnpm-lock.yaml
+
 ```
 
 ---
 
-## 🚀 Usage
+# 📁 Required Files
 
-Run this from the **root directory** of your Node project.  
-You must specify the lockfile using the `--lockfile` argument.
+### 1. Lockfile  
+`pnpm-lock.yaml` must exist, or you must point to it:
 
-### PNPM Audit Example
+```
 
-```sh
+--lockfile=path/to/pnpm-lock.yaml
+
+```
+
+### 2. Malicious list  
+By default the tool uses the built-in `malicious_list.txt`, but you can override it:
+
+```
+
+--malicious=my-list.txt
+
+```
+
+---
+
+# 🔥 Custom Malicious List Support
+
+### Pass a custom `.txt` file:
+
+```
+
+npx check-my-node-project --lockfile=pnpm-lock.yaml --malicious=my-custom-threats.txt
+
+```
+
+### Format of the file:
+
+```
+
+@scope/package (v1.2.3)
+package-name (v4.5.6)
+somepkg (3.2.1)
+
+```
+
+Both `v1.2.3` and `1.2.3` are accepted.
+
+### Notes:
+- The tool normalizes names:
+  - `@scope/pkg` matches nested `(scope/pkg@1.2.3)`
+- Multiple entries allowed
+- Blank lines ignored
+- Duplicates removed automatically
+
+---
+
+# 🚀 Usage
+
+### Basic scan
+
+```
+
 npx check-my-node-project --lockfile=pnpm-lock.yaml
+
+```
+
+### Scan with external malicious list
+
+```
+
+npx check-my-node-project --lockfile=pnpm-lock.yaml --malicious=bad-packages.txt
+
 ```
 
 ---
 
-## ✅ Expected Output
+# 🏷 CLI Flags
 
-### Clean Scan
-
-```
-🔍 Scanning 'pnpm-lock.yaml' for 15 malicious packages...
-
-✅ No matching compromised package versions found in pnpm-lock.yaml.
-```
-
-### ⚠️ Found Vulnerability
+### `--malicious=<file.txt>`
+Use a custom threats list instead of the bundled one.
 
 ```
-🔍 Scanning 'pnpm-lock.yaml' for 15 malicious packages...
 
-⚠️  POTENTIAL COMPROMISED PACKAGES FOUND ⚠️
----------------------------------------------
-ALARM: Found some-malicious-package@1.0.5 in pnpm-lock.yaml
----------------------------------------------
-Total found: 1
+--malicious=my-threats.txt
+
 ```
 
 ---
 
-## 🛠️ How It Works
+### `--json`
+Output machine-readable JSON.
 
-1. CLI runs using the `--lockfile` argument.
-2. Validates the file name (currently must be `pnpm-lock.yaml`).
-3. Reads the internal `malicious_list.txt` file bundled in the npm module.
-4. Parses the user’s lockfile from the current working directory.
-5. Compares every package + version entry against the malicious list.
-6. Reports exact matches and exits with code **1** if any are found.
+### `--silent`
+Suppress human logs (JSON still prints if `--json` is active).
+
+### `--fail-on-safe`
+Even safe versions of malicious packages cause exit code `1`.
+
+### `--include-dev`
+Dev-only malicious packages do **not** cause failure.
+
+### `--strict`
+Any dangerous package (dev or prod) causes failure.
+
+---
+
+# 🔍 Detection Rules
+
+### ✔ Safe match  
+Package exists, but version is *not* the malicious one:
+
+```
+
+✔ lodash@4.17.21 — Safe (malicious version is 4.17.20)
+
+```
+
+### ❌ Dangerous match  
+Exact malicious version installed:
+
+```
+
+❌ better-sqlite3@12.4.1 — Malicious version INSTALLED!
+
+```
+
+### 🌀 Nested match  
+Detected inside PNPM's nested dependency graph:
+
+```
+
+❌ accordproject/concerto-types@3.24.1 (nested)
+
+```
 
 ---
 
-## 📝 Malicious List Format
+# 📊 Exit Codes
 
-The internal `malicious_list.txt` must follow this structure:
-
-```
-compromised-package (1.2.3)
-@scope/another-bad-pkg (v4.0.0)
-```
-
-Package name followed by exact version inside parentheses.
+| Flag mode | What causes failure |
+|----------|----------------------|
+| **Default** | Any dangerous pkg |
+| **--include-dev** | Only prod-dangerous pkgs |
+| **--strict** | Any dangerous pkg (prod or dev) |
+| **--fail-on-safe** | ANY appearance of a malicious package |
+| **--json** | Output only, exit code follows the above rules |
 
 ---
+
+# 🔧 Examples
+
+### Normal scan
+
+```
+
+npx check-my-node-project --lockfile=pnpm-lock.yaml
+
+```
+
+### Strict scan for CI
+
+```
+
+npx check-my-node-project --lockfile=pnpm-lock.yaml --strict
+
+```
+
+### Treat dev deps as harmless
+
+```
+
+npx check-my-node-project --lockfile=pnpm-lock.yaml --include-dev
+
+```
+
+### Fail even on safe versions
+
+```
+
+npx check-my-node-project --lockfile=pnpm-lock.yaml --fail-on-safe
+
+```
+
+### Use a custom malicious list
+
+```
+
+npx check-my-node-project --lockfile=pnpm-lock.yaml --malicious=custom.txt
+
+```
+
+### JSON + silent (script-friendly)
+
+```
+
+npx check-my-node-project --lockfile=pnpm-lock.yaml --json --silent
+
+```
+
+---
+
+# 🙌 Summary
+
+This tool is designed to thoroughly scan PNPM projects for **known malicious packages**, even if they appear in obscure or deeply nested dependency structures.
+
+You can now:
+
+- Provide your own `.txt` list  
+- Control strictness levels  
+- Differentiate dev/prod  
+- Use JSON or silent mode  
+- Fail builds the exact way you want  
+
+Ready to plug into any workflow or local audit.
+```
