@@ -1,4 +1,4 @@
-check-my-node-project
+#check-my-node-project
 
 A self-contained command-line interface (CLI) tool designed to scan Node.js lockfiles for known supply chain vulnerabilities by checking against an internally maintained list of malicious packages and versions.
 
