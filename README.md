@@ -1,43 +1,54 @@
-#check-my-node-project
+# check-my-node-project
 
 A self-contained command-line interface (CLI) tool designed to scan Node.js lockfiles for known supply chain vulnerabilities by checking against an internally maintained list of malicious packages and versions.
 
-Note: As of the initial release, this tool currently only supports and validates PNPM lockfiles (pnpm-lock.yaml). Future versions are planned to extend support to package-lock.json (npm) and yarn.lock.
+> **Note:** Currently supports only **PNPM lockfiles (`pnpm-lock.yaml`)**.  
+> Future updates will add support for `package-lock.json` (npm) and `yarn.lock`.
 
-📦 Installation
+---
 
-To use the tool globally, install it directly from npm:
+## 📦 Installation
 
+Install globally:
+
+```sh
 npm install -g check-my-node-project
+```
 
+Or run without installing (recommended):
 
-Alternatively, you can run it without a global install using npx (recommended).
-
-🚀 Usage
-
-Run the tool from the root directory of your project where your lockfile resides. You must specify the lockfile name using the --lockfile argument.
-
-PNPM Audit Example
-
-# To check your pnpm lockfile
+```sh
 npx check-my-node-project --lockfile=pnpm-lock.yaml
+```
 
+---
 
-Expected Output
+## 🚀 Usage
 
-✅ Clean Scan
+Run this from the **root directory** of your Node project.  
+You must specify the lockfile using the `--lockfile` argument.
 
-If no matching malicious packages are found:
+### PNPM Audit Example
 
+```sh
+npx check-my-node-project --lockfile=pnpm-lock.yaml
+```
+
+---
+
+## ✅ Expected Output
+
+### Clean Scan
+
+```
 🔍 Scanning 'pnpm-lock.yaml' for 15 malicious packages...
 
 ✅ No matching compromised package versions found in pnpm-lock.yaml.
+```
 
+### ⚠️ Found Vulnerability
 
-⚠️ Found Vulnerability
-
-If a malicious package is detected, the process will exit with an error code (1) and list the compromised packages:
-
+```
 🔍 Scanning 'pnpm-lock.yaml' for 15 malicious packages...
 
 ⚠️  POTENTIAL COMPROMISED PACKAGES FOUND ⚠️
@@ -45,26 +56,30 @@ If a malicious package is detected, the process will exit with an error code (1)
 ALARM: Found some-malicious-package@1.0.5 in pnpm-lock.yaml
 ---------------------------------------------
 Total found: 1
+```
 
+---
 
-🛠️ How it Works
+## 🛠️ How It Works
 
-The CLI is executed with the --lockfile argument.
+1. CLI runs using the `--lockfile` argument.
+2. Validates the file name (currently must be `pnpm-lock.yaml`).
+3. Reads the internal `malicious_list.txt` file bundled in the npm module.
+4. Parses the user’s lockfile from the current working directory.
+5. Compares every package + version entry against the malicious list.
+6. Reports exact matches and exits with code **1** if any are found.
 
-The script validates that the specified file is pnpm-lock.yaml (due to current limitations).
+---
 
-The script reads the malicious_list.txt file, which is packaged directly inside the check-my-node-project npm module.
+## 📝 Malicious List Format
 
-It reads and parses the lockfile provided by the user (from the current working directory).
+The internal `malicious_list.txt` must follow this structure:
 
-It compares every package and version in the lockfile against the internal malicious list.
-
-It reports any exact matches found.
-
-📝 Malicious List Format
-
-The internal malicious_list.txt must follow this specific format for each entry:
-
-# Package names are followed by a version in parenthesis
+```
 compromised-package (1.2.3)
 @scope/another-bad-pkg (v4.0.0)
+```
+
+Package name followed by exact version inside parentheses.
+
+---
