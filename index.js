@@ -11,10 +11,10 @@ const __dirname = dirname(__filename);
 const LIST_FILE = 'malicious_list.txt';
 const listPath = join(__dirname, LIST_FILE);
 
-const SUPPORTED_LOCKFILE = 'pnpm-lock.yaml'; // Define the only supported file name
+const SUPPORTED_LOCKFILE = 'pnpm-lock.yaml';
 
 /**
- * Parses command line arguments to find the lockfile path.
+ * Get lockfile name from CLI args.
  */
 function getLockfileName() {
     const lockfileArg = process.argv.find(arg => arg.startsWith('--lockfile='));
@@ -24,9 +24,38 @@ function getLockfileName() {
     return null;
 }
 
+/**
+ * Proper PNPM-safe name + version extractor.
+ */
+function extractNameAndVersion(packagePath) {
+    // PNPM paths vary:
+    // /foo@1.2.3
+    // /@scope/foo@1.2.3
+    // /foo/1.2.3
+    // /registry.npmjs.org/foo/1.2.3
+    // foo@1.2.3
+
+    const match = packagePath.match(/^\/?(.*?)(?:\/|@)(\d+\.\d+\.\d+)/);
+    if (!match) return null;
+
+    const raw = match[1];      // everything before the version segment
+    const version = match[2];  // extracted version
+
+    const segments = raw.split('/');
+
+    let name;
+    if (segments.length >= 2 && segments[0].startsWith('@')) {
+        // Scoped package
+        name = `${segments[0]}/${segments[1]}`;
+    } else {
+        // Non-scoped: take last segment as name
+        name = segments[segments.length - 1];
+    }
+
+    return { name, version };
+}
+
 async function checkLockfile() {
-    
-    // Check 1: Get lockfile name from user
     const lockfileName = getLockfileName();
     if (!lockfileName) {
         console.error('❌ Error: Please specify the lockfile using --lockfile=<filename>.');
@@ -34,97 +63,82 @@ async function checkLockfile() {
         process.exit(1);
     }
 
-    // 🌟 NEW: Enforce PNPM Lockfile
     if (lockfileName !== SUPPORTED_LOCKFILE) {
-        console.error(`❌ Error: Currently, this tool only supports '${SUPPORTED_LOCKFILE}'.`);
-        console.error(`Please use the command: npx check-my-node-project --lockfile=${SUPPORTED_LOCKFILE}`);
-        console.log('\nFuture updates will include support for other package managers.');
+        console.error(`❌ Error: Only '${SUPPORTED_LOCKFILE}' is supported right now.`);
+        console.error(`Use: npx check-my-node-project --lockfile=${SUPPORTED_LOCKFILE}`);
         process.exit(1);
     }
-    // 🌟 END NEW VALIDATION
 
     const lockfilePath = resolve(process.cwd(), lockfileName);
-    
-    // 2. Check if files exist
+
     if (!existsSync(lockfilePath)) {
-        console.error(`❌ Error: Lockfile '${lockfileName}' not found in the current directory.`);
+        console.error(`❌ Error: Lockfile '${lockfileName}' not found in current directory.`);
         process.exit(1);
     }
     if (!existsSync(listPath)) {
-        console.error(`❌ Error: Tool's internal '${LIST_FILE}' not found. Check tool installation.`);
+        console.error(`❌ Error: Internal '${LIST_FILE}' missing. Reinstall the tool.`);
         process.exit(1);
     }
 
-    // 3. Read and parse the malicious list (now internal to the tool)
+    // Read malicious list
     const listContent = readFileSync(listPath, 'utf8');
     const targets = listContent
         .split('\n')
-        .map(line => line.trim())
-        .filter(line => line)
+        .map(l => l.trim())
+        .filter(l => l)
         .map(line => {
-            const match = line.match(/^(@?[\w\-\/]+)\s+\((v?[\d\.]+)\)$/);
-            if (!match) return null;
+            const m = line.match(/^(@?[\w\-\/]+)\s+\((v?[\d\.]+)\)$/);
+            if (!m) return null;
             return {
-                name: match[1],
-                version: match[2].replace(/^v/, '')
+                name: m[1],
+                version: m[2].replace(/^v/, '')
             };
         })
-        .filter(item => item !== null);
+        .filter(Boolean);
 
-    console.log(`🔍 Scanning '${lockfileName}' for ${targets.length} malicious packages...\n`);
+    console.log(`🔍 Scanning '${lockfileName}' with ${targets.length} packages...\n`);
 
-    // 4. Read and parse the lockfile
-    const lockfileContent = readFileSync(lockfilePath, 'utf8');
+    // Parse lockfile
     let lockfile;
     try {
-        lockfile = parse(lockfileContent);
+        lockfile = parse(readFileSync(lockfilePath, 'utf8'));
     } catch (e) {
-        console.error(`❌ Error parsing ${lockfileName}. Please ensure it is a valid YAML file.`);
+        console.error(`❌ Error parsing YAML in ${lockfileName}.`);
         process.exit(1);
     }
 
+    const packages = lockfile.packages || {};
     let foundCount = 0;
     const foundPackages = [];
-    
-    // --- START OF CORE LOGIC (PNPM SPECIFIC) ---
-    // This logic relies on the lockfile being pnpm-lock.yaml
-    const packages = lockfile.packages || {};
 
-    for (const packagePath in packages) {
-        if (Object.hasOwnProperty.call(packages, packagePath)) {
-            // Logic for extracting name and version from pnpm package path
-            const parts = packagePath.split('/');
-            const name = parts[1].startsWith('@') ? `${parts[1]}/${parts[2]}` : parts[1];
-            
-            const versionAndHash = parts[parts.length - 1]; 
-            const versionMatch = versionAndHash.match(/^([\d\.]+)/);
-            const baseVersion = versionMatch ? versionMatch[1] : null;
+    // Scan
+    for (const pkgPath in packages) {
+        const info = extractNameAndVersion(pkgPath);
+        if (!info) continue;
 
-            if (!baseVersion) continue;
+        const { name, version } = info;
 
-            targets.forEach(target => {
-                if (name === target.name && baseVersion === target.version) {
-                    const identifier = `${target.name}@${target.version}`;
-                    if (!foundPackages.includes(identifier)) {
-                        foundCount++;
-                        foundPackages.push(identifier);
-                    }
+        for (const target of targets) {
+            if (name === target.name && version === target.version) {
+                const id = `${name}@${version}`;
+                if (!foundPackages.includes(id)) {
+                    foundPackages.push(id);
+                    foundCount++;
                 }
-            });
+            }
         }
     }
-    // --- END OF CORE LOGIC ---
 
-    // 5. Output results
+    // Results
     if (foundCount > 0) {
         console.log('⚠️  POTENTIAL COMPROMISED PACKAGES FOUND ⚠️');
         console.log('---------------------------------------------');
-        foundPackages.forEach(pkg => console.log(`ALARM: Found ${pkg} in ${lockfileName}`));
+        foundPackages.forEach(pkg => console.log(`ALARM: Found ${pkg}`));
         console.log('---------------------------------------------');
         console.log(`Total found: ${foundCount}`);
         process.exit(1);
     } else {
-        console.log(`✅ No matching compromised package versions found in ${lockfileName}.`);
+        console.log(`✅ No compromised package versions found in ${lockfileName}.`);
     }
 }
 
