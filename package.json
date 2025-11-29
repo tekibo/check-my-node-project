@@ -1,6 +1,6 @@
 {
   "name": "check-my-node-project",
-  "version": "1.0.1",
+  "version": "2.0.0",
   "description": "A self-contained CLI tool to scan lockfiles for known supply chain vulnerabilities.",
   "main": "index.js",
   "scripts": {
