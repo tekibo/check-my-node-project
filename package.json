@@ -1,0 +1,24 @@
+{
+  "name": "check-my-node-project",
+  "version": "1.0.0",
+  "description": "A self-contained CLI tool to scan lockfiles for known supply chain vulnerabilities.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "type": "module",
+  "bin": {
+    "check-my-node-project": "./index.js"
+  },
+  "keywords": [
+    "security",
+    "audit",
+    "lockfile",
+    "cli"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "yaml": "^2.8.1"
+  }
+}
